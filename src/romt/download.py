@@ -27,7 +27,6 @@ class Downloader:
             response = self._session.get(url, stream=True)
             response.raise_for_status()
             for chunk in response.iter_content(chunk_size=4096):
-                # TODO: kill and restart after timeout
                 fileobj.write(chunk)
         except requests.exceptions.RequestException as e:
             common.vvprint("[{}] download error: {}".format(url, e))
