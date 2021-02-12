@@ -58,6 +58,7 @@ def path_append_hash_suffix(path: Path) -> Path:
 def write_hash_file_for(path: Path) -> None:
     h = hash_file(path)
     path_sha256 = path_append_hash_suffix(path)
+    common.vvprint("[{}] writing hash file".format(path))
     with path_sha256.open("w") as f:
         f.write("{}  {}\n".format(h, path.name))
 
@@ -70,9 +71,11 @@ def verify_hash(path: Path, expected_hash: str) -> None:
     """
 
     if not path.exists():
+        common.vvprint("[{}] verify hash missing file".format(path))
         raise MissingFileError(str(path))
     h = hash_file(path)
     if h != expected_hash:
+        common.vvprint("[{}] verify hash bad hash".format(path))
         raise IntegrityError(
             path.name, actual_hash=h, expected_hash=expected_hash
         )

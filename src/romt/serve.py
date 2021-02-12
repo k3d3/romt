@@ -187,6 +187,9 @@ class Main:
         # using getattr() to fetch the function.
         serve_func = getattr(http.server, "test")
 
-        serve_func(
-            HandlerClass=Handler, bind=self.args.bind, port=self.args.port
-        )
+        try:
+            serve_func(
+                HandlerClass=Handler, bind=self.args.bind, port=self.args.port
+            )
+        except Exception as err:
+            common.vvprint("Error serving: {}".format(err))

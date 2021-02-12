@@ -27,8 +27,10 @@ class Downloader:
             response = self._session.get(url, stream=True)
             response.raise_for_status()
             for chunk in response.iter_content(chunk_size=4096):
+                # TODO: kill and restart after timeout
                 fileobj.write(chunk)
         except requests.exceptions.RequestException as e:
+            common.vvprint("[{}] download error: {}".format(url, e))
             raise error.DownloadError(url, e)
 
     def get(self, url: str) -> bytes:
@@ -44,13 +46,16 @@ class Downloader:
         try:
             with open(dest_path, "wb") as f:
                 self.download_fileobj(url, f)
-        except error.DownloadError:
+        except error.DownloadError as err:
+            common.vvprint("[{}] download error: {}".format(dest_path, err))
             if dest_path.is_file():
+                common.vvprint("[{}] file exists, unlinking".format(dest_path))
                 dest_path.unlink()
             raise
 
     def download(self, url: str, dest_path: Path) -> None:
         if dest_path.is_file():
+            common.vvprint("[{}] file exists, unlinking".format(dest_path))
             dest_path.unlink()
         tmp_dest_path = common.tmp_path_for(dest_path)
         self._download(url, tmp_dest_path)
@@ -81,7 +86,10 @@ class Downloader:
             IntegrityError - path exists with bad hash
         """
         common.vprint("[verify] {}".format(path))
-        integrity.verify_hash(path, hash)
+        try:
+            integrity.verify_hash(path, hash)
+        except Exception as err:
+            common.vvprint("[{}] verification failed: {}".format(path, err))
 
     def verify(self, path: Path, *, with_sig: bool = False) -> None:
         """
@@ -114,6 +122,7 @@ class Downloader:
                 common.vprint("[cached file] {}".format(dest_path))
                 return
             except (error.MissingFileError, error.IntegrityError):
+                common.vvprint("[cached, {}] missing file or integrity error, but continuing".format(dest_path))
                 pass
         common.vprint("[downloading] {}".format(dest_path))
         self.download(dest_url, dest_path)

@@ -291,6 +291,8 @@ def _process_crates(
             common.eprint("Error: Missing {}".format(e.name))
         except error.IntegrityError as e:
             common.eprint(str(e))
+        except Exception as e:
+            common.vvprint("Unknown error while processing crates: {}".format(e))
 
         if is_good:
             num_good_paths += 1
@@ -365,23 +367,26 @@ def pack(
     num_good_paths = 0
     num_bad_paths = 0
 
-    with common.tar_context(archive_path, "w") as tar_f:
-        if bundle_path is not None:
-            packed_name = INDEX_BUNDLE_PACKED_NAME
-            common.vprint("[pack] {}".format(packed_name))
-            tar_f.add(str(bundle_path), packed_name)
-        for rel_path in sorted(crate.rel_path() for crate in crates):
-            path = crates_root / rel_path
-            packed_name = "crates/" + rel_path.as_posix()
-            try:
-                common.vprint("[pack] {}".format(rel_path.name))
-                tar_f.add(str(path), packed_name)
-                num_good_paths += 1
-            except FileNotFoundError:
-                num_bad_paths += 1
-                common.eprint("Error: Missing {}".format(rel_path))
-                if not keep_going:
-                    raise error.AbortError()
+    try:
+        with common.tar_context(archive_path, "w") as tar_f:
+            if bundle_path is not None:
+                packed_name = INDEX_BUNDLE_PACKED_NAME
+                common.vprint("[pack] {}".format(packed_name))
+                tar_f.add(str(bundle_path), packed_name)
+            for rel_path in sorted(crate.rel_path() for crate in crates):
+                path = crates_root / rel_path
+                packed_name = "crates/" + rel_path.as_posix()
+                try:
+                    common.vprint("[pack] {}".format(rel_path.name))
+                    tar_f.add(str(path), packed_name)
+                    num_good_paths += 1
+                except FileNotFoundError:
+                    num_bad_paths += 1
+                    common.eprint("Error: Missing {}".format(rel_path))
+                    if not keep_going:
+                        raise error.AbortError()
+    except Exception as err:
+        common.vvprint("Error while packing: {}".format(err))
 
     common.iprint(
         "{} bad paths, {} good paths".format(num_bad_paths, num_good_paths)
@@ -399,30 +404,34 @@ def unpack(
     crates_prefix = "crates/"
     found_bundle = False
 
-    with common.tar_context(archive_path, "r") as tar_f:
-        for tar_info in tar_f:
-            if tar_info.isdir():
-                continue
-            elif tar_info.name == INDEX_BUNDLE_PACKED_NAME:
-                found_bundle = True
-                tar_info.name = str(bundle_path)
-                common.vprint("[unpack] {}".format(tar_info.name))
-                tar_f.extract(tar_info)
+    try:
+        with common.tar_context(archive_path, "r") as tar_f:
+            for tar_info in tar_f:
+                if tar_info.isdir():
+                    continue
+                elif tar_info.name == INDEX_BUNDLE_PACKED_NAME:
+                    found_bundle = True
+                    tar_info.name = str(bundle_path)
+                    common.vprint("[unpack] {}".format(tar_info.name))
+                    tar_f.extract(tar_info)
 
-            elif tar_info.name.startswith(crates_prefix):
-                num_crates += 1
-                tar_info.name = tar_info.name[len(crates_prefix) :]
-                common.vprint(
-                    "[unpack] {}".format(os.path.basename(tar_info.name))
-                )
-                tar_f.extract(tar_info, str(crates_root))
+                elif tar_info.name.startswith(crates_prefix):
+                    num_crates += 1
+                    tar_info.name = tar_info.name[len(crates_prefix) :]
+                    common.vprint(
+                        "[unpack] {}".format(os.path.basename(tar_info.name))
+                    )
+                    tar_f.extract(tar_info, str(crates_root))
 
-            else:
-                common.eprint(
-                    "Unexpected archive member {}".format(tar_info.name)
-                )
-                if not keep_going:
-                    raise error.AbortError()
+                else:
+                    common.eprint(
+                        "Unexpected archive member {}".format(tar_info.name)
+                    )
+                    if not keep_going:
+                        raise error.AbortError()
+    except Exception as err:
+        common.vvprint("Exception unpacking: {}".format(err))
+        raise
 
     if not found_bundle:
         common.eprint("Missing {} in archive".format(INDEX_BUNDLE_PACKED_NAME))
@@ -531,15 +540,19 @@ def init_import(index_path: Path, crates_root_path: Path) -> None:
     bundle_path = index_path / INDEX_BUNDLE_NAME
     bundle_location = str(bundle_path.absolute())
     repo = _init_common(index_path, bundle_location, crates_root_path)
-    with repo.config_writer() as writer:
-        writer.set_value(
-            'remote "origin"', "fetch", "+refs/heads/*:refs/remotes/origin/*"
-        )
-        writer.add_value(
-            'remote "origin"',
-            "fetch",
-            "+refs/heads/bundle/*:refs/remotes/origin/*",
-        )
+    try:
+        with repo.config_writer() as writer:
+            writer.set_value(
+                'remote "origin"', "fetch", "+refs/heads/*:refs/remotes/origin/*"
+            )
+            writer.add_value(
+                'remote "origin"',
+                "fetch",
+                "+refs/heads/bundle/*:refs/remotes/origin/*",
+            )
+    except Exception as err:
+        common.vvprint("Error while importing: {}".format(err))
+        raise
 
 
 def configure_index(repo: git.Repo, server_url: str) -> None:
