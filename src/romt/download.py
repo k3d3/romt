@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import BinaryIO
 
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 from romt import common
 from romt import error
@@ -13,9 +15,36 @@ from romt import integrity
 from romt import signature
 
 
+DEFAULT_TIMEOUT = 5 # seconds
+class TimeoutHTTPAdapter(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.timeout = DEFAULT_TIMEOUT
+        if "timeout" in kwargs:
+            self.timeout = kwargs["timeout"]
+            del kwargs["timeout"]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        timeout = kwargs.get("timeout")
+        if timeout is None:
+            kwargs["timeout"] = self.timeout
+        return super().send(request, **kwargs)
+
+
+retry_strategy = Retry(
+    total=5,
+    status_forcelist=[429, 500, 502, 503, 504],
+    method_whitelist=["HEAD", "GET", "OPTIONS"]
+)
+
+
 class Downloader:
     def __init__(self) -> None:
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+        timeout_adapter = TimeoutHTTPAdapter(max_retries=retries)
         self._session = requests.Session()
+        self._session.mount('http://', timeout_adapter)
+        self._session.mount('https://', timeout_adapter)
         self.sig_verifier = signature.Verifier()
         self._warn_signature = False
 
@@ -29,7 +58,7 @@ class Downloader:
             for chunk in response.iter_content(chunk_size=4096):
                 fileobj.write(chunk)
         except requests.exceptions.RequestException as e:
-            common.vvprint("[{}] download error: {}".format(url, e))
+            common.eprint("[{}] download error: {}".format(url, e))
             raise error.DownloadError(url, e)
 
     def get(self, url: str) -> bytes:
@@ -46,15 +75,15 @@ class Downloader:
             with open(dest_path, "wb") as f:
                 self.download_fileobj(url, f)
         except error.DownloadError as err:
-            common.vvprint("[{}] download error: {}".format(dest_path, err))
+            common.eprint("[{}] download error: {}".format(dest_path, err))
             if dest_path.is_file():
-                common.vvprint("[{}] file exists, unlinking".format(dest_path))
+                common.eprint("[{}] file exists, unlinking".format(dest_path))
                 dest_path.unlink()
             raise
 
     def download(self, url: str, dest_path: Path) -> None:
         if dest_path.is_file():
-            common.vvprint("[{}] file exists, unlinking".format(dest_path))
+            common.eprint("[{}] file exists, unlinking".format(dest_path))
             dest_path.unlink()
         tmp_dest_path = common.tmp_path_for(dest_path)
         self._download(url, tmp_dest_path)
@@ -88,7 +117,7 @@ class Downloader:
         try:
             integrity.verify_hash(path, hash)
         except Exception as err:
-            common.vvprint("[{}] verification failed: {}".format(path, err))
+            common.eprint("[{}] verification failed: {}".format(path, err))
 
     def verify(self, path: Path, *, with_sig: bool = False) -> None:
         """

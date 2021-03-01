@@ -192,4 +192,5 @@ class Main:
                 HandlerClass=Handler, bind=self.args.bind, port=self.args.port
             )
         except Exception as err:
-            common.vvprint("Error serving: {}".format(err))
+            common.eprint("Error serving: {}".format(err))
+            raise

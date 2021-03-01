@@ -71,11 +71,11 @@ def verify_hash(path: Path, expected_hash: str) -> None:
     """
 
     if not path.exists():
-        common.vvprint("[{}] verify hash missing file".format(path))
+        common.eprint("[{}] verify hash missing file".format(path))
         raise MissingFileError(str(path))
     h = hash_file(path)
     if h != expected_hash:
-        common.vvprint("[{}] verify hash bad hash".format(path))
+        common.eprint("[{}] verify hash bad hash".format(path))
         raise IntegrityError(
             path.name, actual_hash=h, expected_hash=expected_hash
         )

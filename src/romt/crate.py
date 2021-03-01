@@ -292,7 +292,8 @@ def _process_crates(
         except error.IntegrityError as e:
             common.eprint(str(e))
         except Exception as e:
-            common.vvprint("Unknown error while processing crates: {}".format(e))
+            common.eprint("Unknown error while processing crates: {}".format(e))
+            raise
 
         if is_good:
             num_good_paths += 1
@@ -386,7 +387,8 @@ def pack(
                     if not keep_going:
                         raise error.AbortError()
     except Exception as err:
-        common.vvprint("Error while packing: {}".format(err))
+        common.eprint("Error while packing: {}".format(err))
+        raise
 
     common.iprint(
         "{} bad paths, {} good paths".format(num_bad_paths, num_good_paths)
@@ -430,7 +432,7 @@ def unpack(
                     if not keep_going:
                         raise error.AbortError()
     except Exception as err:
-        common.vvprint("Exception unpacking: {}".format(err))
+        common.eprint("Exception unpacking: {}".format(err))
         raise
 
     if not found_bundle:
@@ -551,7 +553,7 @@ def init_import(index_path: Path, crates_root_path: Path) -> None:
                 "+refs/heads/bundle/*:refs/remotes/origin/*",
             )
     except Exception as err:
-        common.vvprint("Error while importing: {}".format(err))
+        common.eprint("Error while importing: {}".format(err))
         raise
 
 
